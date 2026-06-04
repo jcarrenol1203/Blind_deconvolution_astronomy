@@ -1,51 +1,60 @@
-import os
-import numpy as np
 import torch
 from torch.utils.data import Dataset
+import galsim
+import numpy as np
 
-class AstronomyDataset(Dataset):
+# Importamos las funciones que ustedes mismos escribieron en los otros archivos
+from src.psf_generator import generate_combined_psf
+from src.image_simulator import generate_pair
+
+class OnlineAstronomyDataset(Dataset):
     """
-    Dataset personalizado para cargar las parejas de galaxias 
-    (Sucia/Observada -> Limpia/Target) para el entrenamiento de la U-Net.
+    Dataset de PyTorch que genera pares de imágenes de galaxias en tiempo real
+    utilizando GalSim y los simuladores del proyecto (On-the-fly).
     """
-    def __init__(self, data_dir, transform=None):
+    # CLAVE: Dejamos catalog_file=None y catalog_dir=None por defecto,
+    # pero le agregamos sample="23.5" para apuntar a lo que ya tienes descargado.
+    def __init__(self, catalog_file=None, catalog_dir=None, sample="23.5", pixel_scale=0.03):
         """
-        data_dir: Ruta a la carpeta donde guardaremos las imágenes simualdas.
+        Inicializa el catálogo COSMOS de GalSim usando la descarga oficial del sistema.
         """
-        self.data_dir = data_dir
-        self.transform = transform
+        self.pixel_scale = pixel_scale
         
-        # Listamos todos los archivos de galaxias sucias como referencia
-        # Asumiendo que guardaremos archivos numerados tipo: 'dirty_0001.npy' y 'clean_0001.npy'
-        self.filenames = [f for f in os.listdir(data_dir) if f.startswith('dirty_')]
-        self.filenames.sort() # Los ordenamos para que coincidan perfectamente
+        # Al pasarle sample="23.5", GalSim buscará exactamente el archivo de 4.2GB
+        # que bajaste en tu .venv automáticamente sin importar las rutas de carpetas.
+        self.catalog = galsim.COSMOSCatalog(
+            file_name=catalog_file,
+            dir=catalog_dir,
+            sample=sample
+        )
+        
+        # Guardamos cuántas galaxias reales tiene el catálogo disponible
+        self.total_galaxies = self.catalog.nobjects
 
     def __len__(self):
-        """Devuelve el número total de imágenes en el dataset."""
-        return len(self.filenames)
+        """Devuelve el total de galaxias disponibles en el catálogo COSMOS."""
+        return self.total_galaxies
 
     def __getitem__(self, idx):
-        """Carga y devuelve un par (imagen_sucia, imagen_limpia) dado un índice."""
-        # 1. Obtener los nombres de los archivos correspondientes
-        dirty_name = self.filenames[idx]
-        clean_name = dirty_name.replace('dirty_', 'clean_')
+        """
+        Genera dinámicamente un par (Imagen_Observada, Imagen_Limpia) 
+        para el índice solicitado en cada iteración del entrenamiento.
+        """
+        # 1. Generamos una PSF óptica+atmosférica aleatoria usando tu psf_generator
+        psf_array, _ = generate_combined_psf(image_size=48, pixel_scale=self.pixel_scale)
         
-        # 2. Construir las rutas completas
-        dirty_path = os.path.join(self.data_dir, dirty_name)
-        clean_path = os.path.join(self.data_dir, clean_name)
+        # 2. Llamamos a tu función maestra de image_simulator para hacer la física
+        x_t_array, x_o_array = generate_pair(
+            catalog=self.catalog,
+            index=idx,
+            psf_array=psf_array,
+            psf_scale=self.pixel_scale,
+            sigma_noise=0.02 # Usa el ruido aleatorio configurado
+        )
         
-        # 3. Cargar las matrices desde el disco duro (.npy de NumPy)
-        dirty_img = np.load(dirty_path).astype(np.float32)
-        clean_img = np.load(clean_path).astype(np.float32)
+        # 3. Convertimos a tensores de PyTorch con float32
+        x_o_tensor = torch.from_numpy(x_o_array).float().unsqueeze(0)
+        x_t_tensor = torch.from_numpy(x_t_array).float().unsqueeze(0)
         
-        # 4. Convertir a Tensores de PyTorch (añadiendo la dimensión del canal: [Canal, Alto, Ancho])
-        # Como son imágenes astronómicas en escala de grises, el canal es 1.
-        dirty_tensor = torch.from_numpy(dirty_img).unsqueeze(0)
-        clean_tensor = torch.from_numpy(clean_img).unsqueeze(0)
-        
-        # Aplicar transformaciones o aumentos de datos si se requieren (ej. rotaciones en caliente)
-        if self.transform:
-            dirty_tensor = self.transform(dirty_tensor)
-            clean_tensor = self.transform(clean_tensor)
-            
-        return dirty_tensor, clean_tensor
+        # 4. Devolvemos (Input_de_la_red, Target_esperado)
+        return x_o_tensor, x_t_tensor

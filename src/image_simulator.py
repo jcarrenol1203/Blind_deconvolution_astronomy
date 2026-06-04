@@ -1,9 +1,14 @@
+import os
+
 import numpy as np
 import galsim
+# 1. Detecta automáticamente dónde está parado el proyecto en cualquier computadora
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-#Constantes de configuración del pipeline
-catalog_file = "real_galaxy_catalog_23.5.fits"   # Archivo de catálogo de galaxias reales
-catalog_dir = "/home/luifer/BlinDeconvolutionAstronomy/data/COSMOS_23.5_training_sample"  # Directorio donde se encuentra el catálogo
+# 2. Construye las rutas partiendo desde la carpeta raíz del proyecto
+catalog_file = "real_galaxy_catalog_23.5.fits"
+catalog_dir = os.path.join(BASE_DIR, "..", "data", "COSMOS_23.5_training_sample")
+
 pixel_scale= 0.03 #arcsec/pixel, escala del HST
 FOV = 48 #campo vision final en pixeles
 upsampling= 4 #factor de sobremuestreo para mejorar la precisión de la simulación
