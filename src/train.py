@@ -14,9 +14,9 @@ def train_model():
     print(f"🚀 Iniciando pipeline. Dispositivo de entrenamiento: {device}")
 
     # 2. Hiperparámetros de entrenamiento
-    BATCH_SIZE = 16        # Tamaño del lote (ligero y seguro para la memoria RAM)
+    BATCH_SIZE = 8     # Tamaño del lote (ligero y seguro para la memoria RAM)
     LEARNING_RATE = 1e-3   # Tasa de aprendizaje inicial estándar (0.001)
-    EPOCHS = 5             # Empezamos con 5 épocas para medir los tiempos en tu CPU
+    EPOCHS = 15             # Empezamos con 5 épocas para medir los tiempos en tu CPU
     STEPS_PER_EPOCH = 100  # ¡CLAVE! Limitamos a 100 pasos por época para que no tarde horas en CPU
 
     # 3. Inicializar el Dataset y el DataLoader de PyTorch
