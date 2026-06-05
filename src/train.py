@@ -15,7 +15,7 @@ def train_model():
 
     # 2. Hiperparámetros de entrenamiento
     BATCH_SIZE = 8     # Tamaño del lote (ligero y seguro para la memoria RAM)
-    LEARNING_RATE = 1e-3   # Tasa de aprendizaje inicial estándar (0.001)
+    LEARNING_RATE = 1e-3   # Tasa de aprendizaje inicial estándar (0.001) este learning rate
     EPOCHS = 15             # Empezamos con 5 épocas para medir los tiempos en tu CPU
     STEPS_PER_EPOCH = 100  # ¡CLAVE! Limitamos a 100 pasos por época para que no tarde horas en CPU
 
