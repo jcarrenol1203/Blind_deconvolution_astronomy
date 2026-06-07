@@ -9,90 +9,53 @@ class DoubleConv(nn.Module):
             nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1, bias=False), #Primera capa de convolución 2D que toma in_channels y produce out_channels. El kernel_size=3 indica que se utiliza un filtro de 3x3, padding=1 asegura que la salida tenga el mismo tamaño espacial que la entrada, y bias=False significa que no se utilizará un término de sesgo en esta capa.
             nn.BatchNorm2d(out_channels), #Capa de normalización por lotes que normaliza las activaciones de la capa anterior. Esto ayuda a estabilizar el entrenamiento y acelerar la convergencia.
             nn.ReLU(inplace=True), #Función de activación ReLU que introduce no linealidad en el modelo. inplace=True permite que la operación se realice en el lugar, lo que puede ahorrar memoria.
-            nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1, bias=False), #
+            nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace=True)
         )
     def forward(self, x): #El método forward define cómo se procesan los datos a través del bloque de convolución doble. Toma una entrada x y la pasa a través de la secuencia de operaciones definida en self.double_conv, devolviendo el resultado final.
         return self.double_conv(x)
+ 
 
-
-class DualStageUNet48(nn.Module): #Dos Etapas, U-Net optimizada para imágenes de 48x48 píxeles
+class UNet48(nn.Module): 
     """
-    U-Net de Dos Etapas optimizada para Astronomía (48x48 píxeles).
+    U-Net de Dos bloques encoder y dos bloques decoder utilizada para Astronomía (48x48 píxeles).
     Contiene estrictamente DOS Encoders y DOS Decoders para un refinamiento progresivo.
     """
-    def __init__(self, in_channels=1, out_channels=1):
+    def __init__(self, in_channels=1, out_channels=1, base_channels=64):
         super().__init__()
 
         # =====================================================================
-        #  ETAPA 1: DECONVOLUCIÓN GRUESA (Primer Encoder y Primer Decoder)
+        # Estructura de la U-net: Entrada → [Encoder 1] → [Encoder 2] → [Bottleneck] → [Decoder 1] → [Decoder 2] → Salida
         # =====================================================================
         # ENCODER 1 (Recibe la imagen de entrada y se encarga de extraer características gruesas)
-        self.enc1_inc = DoubleConv(in_channels, 32) #32x32
-        self.enc1_down1 = nn.Sequential(nn.MaxPool2d(2), DoubleConv(32, 64))   # 24x24
-        self.enc1_down2 = nn.Sequential(nn.MaxPool2d(2), DoubleConv(64, 128))  # 12x12
-        self.enc1_down3 = nn.Sequential(nn.MaxPool2d(2), DoubleConv(128, 256)) # 6x6
-        
-        # DECODER 1 (Recibe las características extraídas por el Encoder 1 y produce una imagen de salida intermedia de baja resolución)
-        self.dec1_up1 = nn.ConvTranspose2d(256, 128, kernel_size=2, stride=2)
-        self.dec1_conv1 = DoubleConv(256, 128)
-        self.dec1_up2 = nn.ConvTranspose2d(128, 64, kernel_size=2, stride=2)
-        self.dec1_conv2 = DoubleConv(128, 64)
-        self.dec1_up3 = nn.ConvTranspose2d(64, 32, kernel_size=2, stride=2)
-        self.dec1_conv3 = DoubleConv(64, 32)
-        self.dec1_out = nn.Sequential(nn.Conv2d(32, out_channels, kernel_size=1), nn.Tanh())
-
-        # =====================================================================
-        #  ETAPA 2: REFINAMIENTO FINO (Segundo Encoder y Segundo Decoder)
-        # =====================================================================
-        # ENCODER 2 (Recibe la salida de la Etapa 1)
-        self.enc2_inc = DoubleConv(out_channels, 32)
-        self.enc2_down1 = nn.Sequential(nn.MaxPool2d(2), DoubleConv(32, 64))
-        self.enc2_down2 = nn.Sequential(nn.MaxPool2d(2), DoubleConv(64, 128))
-        self.enc2_down3 = nn.Sequential(nn.MaxPool2d(2), DoubleConv(128, 256))
-        
-        # DECODER 2
-        self.dec2_up1 = nn.ConvTranspose2d(256, 128, kernel_size=2, stride=2)
-        self.dec2_conv1 = DoubleConv(256, 128)
-        self.dec2_up2 = nn.ConvTranspose2d(128, 64, kernel_size=2, stride=2)
-        self.dec2_conv2 = DoubleConv(128, 64)
-        self.dec2_up3 = nn.ConvTranspose2d(64, 32, kernel_size=2, stride=2)
-        self.dec2_conv3 = DoubleConv(64, 32)
-        self.dec2_out = nn.Sequential(nn.Conv2d(32, out_channels, kernel_size=1), nn.Tanh())
-
+        self.enc1 = DoubleConv(in_channels, base_channels) #Se extraen caracteristicas gruesas, tensor de 64x48x48
+        self.enc1_down = nn.MaxPool2d(2) #Bajada de resolución, tensor de 64x24x24
+        #Encoder 2 (Recibe la salida de Encoder 1 y se encarga de extraer características más profundas para el refinamiento)
+        self.enc2 = DoubleConv(base_channels, base_channels*2) #Se extraen caracteristicas más profundas, tensor de 128x24x24
+        self.enc2_down = nn.MaxPool2d(2) #Bajada de resolución, tensor de 128x12x12
+        #Bottleneck (El corazón de la U-Net, donde se extraen las características más abstractas y profundas de la imagen)
+        self.bottleneck = DoubleConv(base_channels*2, base_channels*4) #Se extraen características aún más profundas, tensor de 256x12x12
+        # DECODER 1 (Recibe la salida del Bottleneck y se encarga de reconstruir la imagen a una resolución intermedia)
+        self.dec1_up = nn.ConvTranspose2d(base_channels*4, base_channels*2, kernel_size=2, stride=2) #Subida de resolución, tensor de 128x24x24
+        self.dec1 = DoubleConv(base_channels*4, base_channels*2) #Convolución para refinar la imagen, tensor de 128x24x24 (concatenación de la salida del Bottleneck y la salida de Encoder 2)
+        # DECODER 2 
+        self.dec2_up = nn.ConvTranspose2d(base_channels*2, base_channels, kernel_size=2, stride=2) #Subida de resolución, tensor de 64x48x48
+        self.dec2 = DoubleConv(base_channels*2, base_channels) #Convolución para refinar la imagen, tensor de 64x48x48
+        self.dec2_final = nn.Sequential(nn.Conv2d(base_channels, out_channels, kernel_size=1),#Capa de salida que reduce los canales a out_channels (1 en este caso), tensor de 1x48x48
+                                      nn.Tanh()) #tanh para asegurar que la salida esté en el rango [-1, 1] , consitente con la normalización de las imágenes de entrada
     def forward(self, x):
         # --- FLUJO ETAPA 1 --- 
-        x1 = self.enc1_inc(x) #La imagen de entrada x pasa por el primer bloque de convolución del Encoder 1, produciendo x1, que contiene características extraídas de la imagen original.
-        x2 = self.enc1_down1(x1)
-        x3 = self.enc1_down2(x2)
-        x4 = self.enc1_down3(x3)
-        
-        u1 = torch.cat([self.dec1_up1(x4), x3], dim=1) #Se concatena la salida del bloque de convolución transpuesta (dec1_up1) con las características correspondientes del Encoder 1 (x3) para formar u1, que se procesa a través de dec1_conv1 para refinar las características.
-        u1 = self.dec1_conv1(u1)
-        u2 = torch.cat([self.dec1_up2(u1), x2], dim=1)
-        u2 = self.dec1_conv2(u2)
-        u3 = torch.cat([self.dec1_up3(u2), x1], dim=1)
-        u3 = self.dec1_conv3(u3)
-        
-        # Resultado intermedio (Predicción gruesa)
-        coarse_output = self.dec1_out(u3) 
-
-        # --- FLUJO ETAPA 2 (Refinamiento) ---
-        # Metemos la salida de la Etapa 1 al segundo juego de Encoder/Decoder
-        y1 = self.enc2_inc(coarse_output)
-        y2 = self.enc2_down1(y1)
-        y3 = self.enc2_down2(y2)
-        y4 = self.enc2_down3(y3)
-        
-        w1 = torch.cat([self.dec2_up1(y4), y3], dim=1)
-        w1 = self.dec2_conv1(w1)
-        w2 = torch.cat([self.dec2_up2(w1), y2], dim=1)
-        w2 = self.dec2_conv2(w2)
-        w3 = torch.cat([self.dec2_up3(w2), y1], dim=1)
-        w3 = self.dec2_conv3(w3)
+        enc1_out = self.enc1(x) #Salida del Encoder 1, tensor de 64x48x48
+        enc2_out = self.enc2(self.enc1_down(enc1_out)) #Salida del Encoder 2, tensor de 128x24x24
+        b= self.bottleneck(self.enc2_down(enc2_out)) #Salida del Bottleneck, tensor de 256x12x12
+        # --- FLUJO ETAPA 2 ---
+        dec1_up= self.dec1_up(b) #Subida de resolución en Decoder 1, tensor de 128x24x24
+        dec1_out = self.dec1(torch.cat([dec1_up, enc2_out], dim=1)) #Concatenación de la salida de Decoder 1 y la salida de Encoder
+        dec2_up = self.dec2_up(dec1_out) #Subida de resolución en Decoder 2, tensor de 64x48x48
+        dec2_out = self.dec2(torch.cat([dec2_up, enc1_out], dim=1)) #Concatenación de la salida de Decoder 2 y la salida de Encoder 1, tensor de 64x48x48
         
         # Resultado final deconvolucionado de alta calidad
-        final_output = self.dec2_out(w3)
+        final_output = self.dec2_final(dec2_out) #tensor de 1x48x48, imagen de salida limpia con rango de valores [-1, 1]
         
         return final_output

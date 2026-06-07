@@ -207,7 +207,7 @@ def generate_pair(catalog, index, psf_array, psf_scale, sigma_noise=None):
 # ------------------------------------------------------------
 # Bloque de prueba - eliminar antes de usar en entrenamiento
 # ------------------------------------------------------------
-if __name__ == "__main__":
+"""if __name__ == "__main__":
 
     catalog = galsim.COSMOSCatalog(
         file_name=catalog_file,
@@ -228,5 +228,5 @@ if __name__ == "__main__":
 
     print(f"x_t → shape: {x_t.shape} | rango: [{x_t.min():.4f}, {x_t.max():.4f}]")
     print(f"x_o → shape: {x_o.shape} | rango: [{x_o.min():.4f}, {x_o.max():.4f}]")
-
+"""
     
