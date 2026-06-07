@@ -8,14 +8,6 @@ from image_simulator import generate_pair
 
 # ------------------------------------------------------------
 # Dataset de PyTorch que genera pares (x_o, x_t) on-the-fly.
-#
-# INPUT __init__:
-#   index_pool   (np.ndarray): índices del catálogo COSMOS
-#                asignados a este split (train o val).
-#                Ejemplo: array([14823, 7341, 52011, ...])
-#   catalog_file (str): nombre del archivo .fits
-#   catalog_dir  (str): directorio donde está el catálogo
-#   pixel_scale  (float): arcsec/pixel
 # ------------------------------------------------------------
 class OnlineAstronomyDataset(Dataset):
 
@@ -23,47 +15,38 @@ class OnlineAstronomyDataset(Dataset):
                  catalog_dir=None, pixel_scale=0.03):
 
         self.pixel_scale = pixel_scale
-        self.index_pool  = index_pool   # array de 5000 o 1000 índices reales
+        self.index_pool  = index_pool   # array de índices reales del catálogo
 
-        self.catalog = galsim.COSMOSCatalog( #se carga el catálogo COSMOS de GalSim, que contiene las galaxias reales del Hubble
+        self.catalog = galsim.COSMOSCatalog(
             file_name=catalog_file,
             dir=catalog_dir,
         )
 
     def __len__(self):
-        # Le dice al DataLoader hasta qué idx puede pedir: 0 a 4999
         return len(self.index_pool)
 
-    # ------------------------------------------------------------
-    # El DataLoader llama esta función con idx en [0, len-1].
-    # idx es la posición dentro del split, NO el índice de COSMOS.
-    #
-    # INPUT:  idx (int) posición en index_pool, rango [0, 4999]
-    # OUTPUT: x_o_tensor [1,48,48], x_t_tensor [1,48,48]
-    # ------------------------------------------------------------
     def __getitem__(self, idx):
-
         # Traducción: posición local → índice real del catálogo COSMOS
-        # Ejemplo: idx=37 → index_pool[37] = 14823 → galaxia 14823
         cosmos_idx = int(self.index_pool[idx])
 
+        # Generar PSF combinada (Atmósfera + Óptica)
         psf_array, _ = generate_combined_psf(
             image_size=48, pixel_scale=self.pixel_scale
         )
 
+        # 🚀 CORREGIDO: Se elimina 'sigma_noise=None' para que use internamente
+        # la distribución aleatoria acotada U(0.01, 0.15) de image_simulator.py
         x_t_array, x_o_array = generate_pair(
             catalog    = self.catalog,
-            index      = cosmos_idx,  # entero, índice real de GalSim
+            index      = cosmos_idx,  
             psf_array  = psf_array,
-            psf_scale  = self.pixel_scale,
-            sigma_noise= None         # muestrea U(0,1) según el paper
+            psf_scale  = self.pixel_scale
         )
 
         x_o_tensor = torch.from_numpy(x_o_array).float().unsqueeze(0)
         x_t_tensor = torch.from_numpy(x_t_array).float().unsqueeze(0)
 
         return x_o_tensor, x_t_tensor
-    
 """if __name__ == "__main__":
     import numpy as np
     import matplotlib.pyplot as plt
