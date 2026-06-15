@@ -123,10 +123,8 @@ def array_to_gsobject(psf_array, pixel_scale):
 #OUTPUT: x_o (np.ndarray), noise_std (float, para debugging)
 #-------------------------------------------
 
-def draw_x0_degraded(x_t_obj, psf_obj, noise_std =None):
+def draw_x0_degraded(x_t_obj, psf_obj):
 
-    if noise_std is None:
-        noise_std = np.random.uniform(0, 1)
     #Convolucion con PSF_new
     degraded_image= galsim.Convolve([x_t_obj, psf_obj])
 
@@ -139,11 +137,8 @@ def draw_x0_degraded(x_t_obj, psf_obj, noise_std =None):
                w // upsampling, upsampling
            ).mean(axis=(1, 3))
 
-    # Agregar ruido gaussiano blanco aditivo
-    if noise_std > 0:
-        x_o = x_o + np.random.normal(scale=noise_std, size=x_o.shape)
-
-    return x_o, noise_std
+    
+    return x_o
 
 #-------------------------------------------
 #Función para normalizar imágenes a rango [-1,1]
@@ -180,14 +175,14 @@ def normalize_image(image):
 #   x_t (np.ndarray): ground truth normalizado 192x192
 #   x_o (np.ndarray): imagen observada normalizada 48x48
 # ------------------------------------------------------------
-def generate_pair(catalog, index, psf_array, psf_scale, sigma_noise=None):
+def generate_pair(catalog, index, psf_obj, sigma_noise=None):
 
     galaxy           = load_galaxy(catalog, index)
     galaxy_t, _      = apply_random_transforms(galaxy)
     psf_hst          = galaxy.original_psf
     x_t, x_t_obj     = draw_ground_truth(galaxy_t, psf_hst)
-    psf_obj          = array_to_gsobject(psf_array, psf_scale)
-    x_o, _           = draw_x0_degraded(x_t_obj, psf_obj, sigma_noise)
+    #psf_obj          = array_to_gsobject(psf_array, psf_scale)
+    x_o              = draw_x0_degraded(x_t_obj, psf_obj)
 
     # Aplicar el mismo pooling 4x4 sobre x_t para que ambas
     # imágenes tengan el mismo tamaño 48x48 al entrar a la red
@@ -199,6 +194,14 @@ def generate_pair(catalog, index, psf_array, psf_scale, sigma_noise=None):
     
     x_t              = normalize_image(x_t)
     x_o              = normalize_image(x_o)
+
+    # Agregar ruido gaussiano blanco aditivo
+    if sigma_noise is None:
+        sigma_noise = float(np.random.uniform(0,1))
+
+    if sigma_noise > 0:
+        x_o = x_o + np.random.normal(scale=sigma_noise, size=x_o.shape)
+
 
     return x_t, x_o
 

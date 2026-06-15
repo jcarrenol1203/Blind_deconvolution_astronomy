@@ -1,4 +1,5 @@
 import os
+import csv
 import torch
 import numpy as np
 import galsim
@@ -40,7 +41,7 @@ def train_model():
     CATALOG_DIR   = "/home/luifer/BlindDeconvolutionAstronomy/data/COSMOS_23.5_training_sample"
     #Obtenemos el maximo de galaxias del catalogo COSMOS
     TOTAL_GALAXIES = galsim.COSMOSCatalog(file_name=CATALOG_FILE, dir=CATALOG_DIR).nobjects
-
+    PATH_CSV_LOSS = "loss_eval.csv"
 
     # 3. Inicializar el Dataset y el DataLoader de PyTorch
     train_idx, val_idx = index_split(TOTAL_GALAXIES, N_TRAIN, N_VAL) #Hacemos el split de indices para entrenamiento y validación
@@ -68,6 +69,12 @@ def train_model():
     print(f"🏋️ En sus marcas... ¡A entrenar! Total de épocas: {EPOCHS}")
     print("-" * 50)
     best_val_loss = float('inf')  # Para guardar el mejor modelo basado en la pérdida de validación
+    #Inicializar csv para guardar avance de la perdida
+    #Si ya existe, lo abrimos en append, si no existe, se crea el archivo.
+    if not os.path.exists(PATH_CSV_LOSS):
+        with open (PATH_CSV_LOSS, 'w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(['epoch','train_loss','val_loss'])
 
     # 6. Bucle Principal de Entrenamiento
     for epoch in range(EPOCHS):
@@ -108,11 +115,21 @@ def train_model():
         print(f"✅ ÉPOCA {epoch+1} TERMINADA | Pérdida Promedio de validation: {val_loss:.5f}")
         print("-" * 50)
 
+        #Guardamos en el csv
+        with open(PATH_CSV_LOSS, 'a', newline='') as f:
+            writer= csv.writer(f)
+            writer.writerow([epoch +1, train_loss, val_loss])
+
         #7. Guardar el modelo al final de cada época solo si val_loss < best_val_loss
         checkpoint_path = "best_model.pth"
         if val_loss < best_val_loss:
             best_val_loss= val_loss
-            torch.save(model.state_dict(), checkpoint_path)
+            torch.save({
+                'epoch'    : epoch,
+                'model'    : model.state_dict(),
+                'optimizer': optimizer.state_dict(),
+                'val_loss' : best_val_loss
+            }, checkpoint_path)
             print(f"Época [{epoch+1:3d}/{EPOCHS}] | "
               f"Train Loss: {train_loss:.5f} | "
               f"Val Loss: {best_val_loss:.5f} ✅ mejor modelo guardado")

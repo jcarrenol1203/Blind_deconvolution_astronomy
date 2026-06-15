@@ -47,15 +47,14 @@ class OnlineAstronomyDataset(Dataset):
         # Ejemplo: idx=37 → index_pool[37] = 14823 → galaxia 14823
         cosmos_idx = int(self.index_pool[idx])
 
-        psf_array, _ = generate_combined_psf(
-            image_size=48, pixel_scale=self.pixel_scale
+        _, psf_obj, _, _ = generate_combined_psf(
+            image_size=192, pixel_scale=self.pixel_scale
         )
 
         x_t_array, x_o_array = generate_pair(
             catalog    = self.catalog,
             index      = cosmos_idx,  # entero, índice real de GalSim
-            psf_array  = psf_array,
-            psf_scale  = self.pixel_scale,
+            psf_obj  = psf_obj,
             sigma_noise= None         # muestrea U(0,1) según el paper
         )
 
