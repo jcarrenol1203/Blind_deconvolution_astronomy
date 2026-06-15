@@ -42,8 +42,8 @@ class UNet48(nn.Module):
         # DECODER 2 
         self.dec2_up = nn.ConvTranspose2d(base_channels*2, base_channels, kernel_size=2, stride=2) #Subida de resolución, tensor de 64x48x48
         self.dec2 = DoubleConv(base_channels*2, base_channels) #Convolución para refinar la imagen, tensor de 64x48x48
-        self.dec2_final = nn.Sequential(nn.Conv2d(base_channels, out_channels, kernel_size=1),#Capa de salida que reduce los canales a out_channels (1 en este caso), tensor de 1x48x48
-                                      nn.Tanh()) #tanh para asegurar que la salida esté en el rango [-1, 1] , consitente con la normalización de las imágenes de entrada
+        self.dec2_final = nn.Conv2d(base_channels, out_channels, kernel_size=1)#Capa de salida que reduce los canales a out_channels (1 en este caso), tensor de 1x48x48
+    
     def forward(self, x):
         # --- FLUJO ETAPA 1 --- 
         enc1_out = self.enc1(x) #Salida del Encoder 1, tensor de 64x48x48
