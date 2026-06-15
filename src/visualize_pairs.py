@@ -13,7 +13,7 @@ from image_simulator import generate_pair
 
 # --- Configuración ---
 CATALOG_FILE = "real_galaxy_catalog_23.5.fits"
-CATALOG_DIR  = "/home/luifer/BlindDeconvolutionAstronomy/data/COSMOS_23.5_training_sample"
+CATALOG_DIR  =  "/home/jacl/github/Blind_deconvolution_astronomy/.venv/lib/python3.11/site-packages/galsim/share/COSMOS_23.5_training_sample"
 N_IMAGES     = 20
 SEED         = 42
 

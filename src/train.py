@@ -38,7 +38,7 @@ def train_model():
     N_VAL= 1000
     #Datos del catálogo COSMOS
     CATALOG_FILE  = "real_galaxy_catalog_23.5.fits"
-    CATALOG_DIR   = "/home/luifer/BlindDeconvolutionAstronomy/data/COSMOS_23.5_training_sample"
+    CATALOG_DIR   =  "/home/jacl/github/Blind_deconvolution_astronomy/.venv/lib/python3.11/site-packages/galsim/share/COSMOS_23.5_training_sample"
     #Obtenemos el maximo de galaxias del catalogo COSMOS
     TOTAL_GALAXIES = galsim.COSMOSCatalog(file_name=CATALOG_FILE, dir=CATALOG_DIR).nobjects
     PATH_CSV_LOSS = "loss_eval.csv"
