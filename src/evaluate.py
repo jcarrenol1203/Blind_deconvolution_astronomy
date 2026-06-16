@@ -18,6 +18,7 @@ if BASE_DIR not in sys.path:
 from dataset import OnlineAstronomyDataset
 from model import UNet48  
 
+#Cálculo de la PSNR (Peak Signal-to-Noise Ratio) entre la imagen predicha y la imagen objetivo.
 def psnr(pred: np.ndarray, target: np.ndarray, data_range: float = 2.0) -> float:
     mse = np.mean((pred - target) ** 2)
     if mse == 0.0:
@@ -34,11 +35,12 @@ def index_split(total_galaxies, n_train, n_val, seed=42):
     val_idx = indices[n_train:n_train + n_val]
     
     # Extraemos también el bloque que sobra para usarlo como test_idx de evaluación
-    # Tomamos las siguientes 500 galaxias después de la validación
-    test_idx = indices[n_train + n_val : n_train + n_val + 500]
+    # Tomamos las siguientes 1000 galaxias después de la validación
+    test_idx = indices[n_train + n_val : n_train + n_val + 1000]
     
     return train_idx, val_idx, test_idx
 
+# -- FUNCIÓN DE EVALUACIÓN DEL MODELO --
 def evaluate_model(model, dataset, device, n_samples=20):
     """Evalúa exactamente n_samples aleatorios y calcula las métricas PSNR."""
     model.eval()
@@ -52,16 +54,16 @@ def evaluate_model(model, dataset, device, n_samples=20):
 
     print(f"  Procesando {len(indices)} imágenes del catálogo COSMOS...")
 
-    with torch.no_grad():
+    with torch.no_grad(): #Esto hace que no se calculen gradientes, lo que ahorra memoria y acelera la evaluación.
         for count, idx in enumerate(indices):
-            x_o, x_t = dataset[int(idx)]
-            inp = x_o.unsqueeze(0).to(device)
+            x_o, x_t = dataset[int(idx)] # x_o es la imagen observada (con ruido y desenfoque), x_t es la imagen objetivo (ground truth)
+            inp = x_o.unsqueeze(0).to(device) # Agrega una dimensión de batch (1, 1, H, W) y mueve a GPU si está disponible
             
-            refined_tensor = model(inp)
+            refined_tensor = model(inp) # Pasa la imagen observada a través del modelo para obtener la imagen refinada (predicción)
 
-            x_o_np = x_o.squeeze().numpy()
+            x_o_np = x_o.squeeze().numpy() # Convierte el tensor de PyTorch a un array de NumPy para el cálculo de PSNR y visualización
             x_t_np = x_t.squeeze().numpy()
-            refined_np = refined_tensor.squeeze().cpu().numpy()
+            refined_np = refined_tensor.squeeze().cpu().numpy() #
 
             p_initial = psnr(x_o_np, x_t_np)
             p_final = psnr(refined_np, x_t_np)
@@ -145,7 +147,7 @@ def run_notebook_evaluation(model_filename="best_model.pth", n_samples=20):
         print(f"❌ Error: No se encontró el archivo de pesos ({model_filename}).")
         return None
 
-    model = UNet48(in_channels=1, out_channels=1).to(device)
+    model = UNet48(in_channels=1, out_channels=1).to(device) # Carga el modelo UNet48 y lo mueve a GPU si está disponible
     
     checkpoint = torch.load(model_path, map_location=device)
     if isinstance(checkpoint, dict) and "model" in checkpoint:
