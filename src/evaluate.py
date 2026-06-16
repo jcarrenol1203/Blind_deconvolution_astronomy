@@ -6,7 +6,7 @@ import galsim
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 
-# ── INYECTOR DE RUTAS (Arregla el ModuleNotFoundError: No module named 'src') ──
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__)) # Ruta de src/
 ROOT_DIR = os.path.normpath(os.path.join(BASE_DIR, "..")) # Ruta raíz del proyecto
 if ROOT_DIR not in sys.path:
@@ -24,13 +24,29 @@ def psnr(pred: np.ndarray, target: np.ndarray, data_range: float = 2.0) -> float
         return float('inf')
     return 10.0 * np.log10((data_range ** 2) / mse)
 
-def evaluate_model(model, dataset, device, n_samples=5):
+# -- FUNCIÓN DE DIVISIÓN DE ÍNDICES --
+def index_split(total_galaxies, n_train, n_val, seed=42):
+    assert n_train + n_val <= total_galaxies, "No hay suficientes galaxias para el split."
+    rng = np.random.default_rng(seed)
+    indices = rng.permutation(total_galaxies)  # Mezcla aleatoria de los índices
+
+    train_idx = indices[:n_train]
+    val_idx = indices[n_train:n_train + n_val]
+    
+    # Extraemos también el bloque que sobra para usarlo como test_idx de evaluación
+    # Tomamos las siguientes 500 galaxias después de la validación
+    test_idx = indices[n_train + n_val : n_train + n_val + 500]
+    
+    return train_idx, val_idx, test_idx
+
+def evaluate_model(model, dataset, device, n_samples=20):
     """Evalúa exactamente n_samples aleatorios y calcula las métricas PSNR."""
     model.eval()
     psnr_initial_list = []
     psnr_final_list = []
     results_data = []
 
+    # Selecciona al azar las n_samples (20) dentro del dataset de prueba creado
     indices = np.random.choice(len(dataset), size=min(n_samples, len(dataset)), replace=False)
     indices.sort()
 
@@ -53,7 +69,6 @@ def evaluate_model(model, dataset, device, n_samples=5):
             psnr_initial_list.append(p_initial)
             psnr_final_list.append(p_final)
 
-            # 🛠️ Quitamos el cálculo del residual que ya no usaremos
             results_data.append((x_o_np, refined_np, x_t_np))
             
             print(f"    [{count + 1}/{len(indices)}] Muestra #{idx} | PSNR Entrada: {p_initial:.2f} dB | PSNR IA: {p_final:.2f} dB")
@@ -61,12 +76,12 @@ def evaluate_model(model, dataset, device, n_samples=5):
     return results_data, psnr_initial_list, psnr_final_list
 
 def build_notebook_figure(results_data, psnr_initial, psnr_final):
-    """Genera y retorna el objeto Figure adaptado visualmente sin columna residual."""
+    """Genera y retorna el objeto Figure adaptado visualmente para 20 muestras."""
     n = len(results_data)
     if n == 0:
         return None
         
-    # Reducimos el ancho de la figura de 14 a 11 ya que ahora son 3 columnas
+    # Ajustamos dinámicamente el tamaño de la figura en el eje vertical según las 'n' muestras (20)
     fig = plt.figure(figsize=(11, 3.5 * n + 1.2), facecolor='#0d0d0d')
 
     col_labels = [
@@ -77,13 +92,12 @@ def build_notebook_figure(results_data, psnr_initial, psnr_final):
     col_colors = ['#4a9eff', '#a78bfa', '#34d399']
 
     fig.suptitle(
-        f"Evaluación de Deconvolución Ciega\n"
+        f"Evaluación de Deconvolución Ciega (20 Muestras de Test)\n"
         f"PSNR Inicial Promedio: {np.mean(psnr_initial):.2f} dB   ➔   "
         f"PSNR Final Promedio: {np.mean(psnr_final):.2f} dB",
-        fontsize=13, color='white', y=0.98, fontweight='bold', fontfamily='monospace'
+        fontsize=13, color='white', y=0.99, fontweight='bold', fontfamily='monospace'
     )
 
-    # 🛠️ GridSpec configurado ahora a 3 columnas en vez de 4
     gs = gridspec.GridSpec(n, 3, figure=fig, hspace=0.35, wspace=0.1)
 
     for row, ((x_o, refined, x_t), p_i, p_f) in enumerate(zip(results_data, psnr_initial, psnr_final)):
@@ -117,8 +131,8 @@ def build_notebook_figure(results_data, psnr_initial, psnr_final):
 
     return fig
 
-def run_notebook_evaluation(model_filename="best_model.pth", n_samples=5):
-    """Función maestra que garantiza el uso de un Test Set puro que la IA jamás ha visto."""
+def run_notebook_evaluation(model_filename="best_model.pth", n_samples=20):
+    """Función maestra que utiliza el test_idx generado por index_split."""
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
     model_path = os.path.normpath(os.path.join(BASE_DIR, model_filename))
@@ -144,14 +158,13 @@ def run_notebook_evaluation(model_filename="best_model.pth", n_samples=5):
     
     TOTAL_GALAXIES = galsim.COSMOSCatalog(file_name="real_galaxy_catalog_23.5.fits", dir=catalog_dir_final).nobjects
     
-    rng = np.random.default_rng(seed=42)
-    indices_permutados = rng.permutation(TOTAL_GALAXIES)
-    
-    # Test set puro aislado de train y validación
-    pool_evaluacion = indices_permutados[6000:6500]
+    # ─── 🛡️ REPLICACIÓN RESTRINGIDA DEL SPLIT DE DATA (Misma Semilla 42) ───
+    # Pasamos los mismos hiperparámetros que train.py: 5000 para train, 1000 para validación
+    _, _, test_idx = index_split(total_galaxies=TOTAL_GALAXIES, n_train=5000, n_val=1000, seed=42)
+    # ───────────────────────────────────────────────────────────────────────
     
     dataset = OnlineAstronomyDataset(
-        index_pool=pool_evaluacion, 
+        index_pool=test_idx,  # 🚀 Asignamos el test_idx puro e inédito
         catalog_file="real_galaxy_catalog_23.5.fits",
         catalog_dir=catalog_dir_final, 
         pixel_scale=0.03
@@ -162,8 +175,8 @@ def run_notebook_evaluation(model_filename="best_model.pth", n_samples=5):
     return fig
 
 if __name__ == "__main__":
-    print("⏳ Iniciando evaluación del modelo con tus rutas locales (Versión 3 Columnas)...")
-    figura = run_notebook_evaluation(model_filename="best_model.pth", n_samples=5)
+    print("⏳ Iniciando evaluación del modelo con tus rutas locales (Versión 20 Imágenes)...")
+    figura = run_notebook_evaluation(model_filename="best_model.pth", n_samples=20)
     if figura is not None:
         figura.savefig("evaluacion_unet48_resultados.png", bbox_inches='tight', dpi=150)
-        print("\n✅ ¡Evaluación completada con éxito! Imagen guardada en 'evaluacion_unet48_resultados.png'")
+        print("\n✅ ¡Evaluación completada con éxito! Imagen de 20 muestras guardada en 'evaluacion_unet48_resultados.png'")
